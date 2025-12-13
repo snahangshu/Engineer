@@ -1,0 +1,155 @@
+from fastapi import APIRouter, Depends, HTTPException
+from bson import ObjectId
+from database import kyc_collection, bank_collection, profiles_collection, users_collection
+from auth_routes import get_current_user
+
+router = APIRouter(prefix="/admin", tags=["Admin"])
+
+
+async def get_admin(current_user=Depends(get_current_user)):
+    if current_user.get("role") != "admin":
+        raise HTTPException(403, "Admin only")
+    return current_user
+# --- ADMIN HOME ---
+@router.get("/")
+async def admin_home(admin=Depends(get_admin)):
+    return {"message": "Admin Panel Active"}
+
+@router.get("/engineers")
+async def list_engineers(admin=Depends(get_admin)):
+    cursor = profiles_collection.aggregate([
+        {"$lookup": {"from": "users", "localField": "user_id", "foreignField": "_id", "as": "user"}},
+        {"$unwind": "$user"}
+    ])
+    result = []
+    async for doc in cursor:
+        doc["id"] = str(doc["_id"])
+        doc["user_id"] = str(doc["user_id"])
+        doc.pop("_id", None)
+        result.append(doc)
+    return result
+
+# --- FULL ENGINEER DETAILS ---
+@router.get("/engineers/{user_id}")
+async def get_engineer_details(user_id: str, admin=Depends(get_admin)):
+    uid = ObjectId(user_id)
+
+    user = await users_collection.find_one({"_id": uid})
+    profile = await profiles_collection.find_one({"user_id": uid})
+    kyc = await kyc_collection.find_one({"user_id": uid})
+    bank = await bank_collection.find_one({"user_id": uid})
+
+    if not user:
+        raise HTTPException(404, "Engineer not found")
+    #convert IDS
+    user["_id"] = str(user["_id"])
+    if profile:
+        profile["_id"] = str(profile["_id"])
+        profile["user_id"] = str(profile["user_id"])
+    if kyc:
+        kyc["_id"] = str(kyc["_id"])
+        kyc["user_id"] = str(kyc["user_id"])
+    if bank:
+        bank["_id"] = str(bank["_id"])
+        bank["user_id"] = str(bank["user_id"])
+    return {
+        "user": user,
+        "profile": profile,
+        "kyc": kyc,
+        "bank": bank,
+    }
+    # return {
+    #     "user": {**user, "_id": str(user["_id"])},
+
+    #     "profile": (
+    #         {**profile, "_id": str(profile["_id"])} if profile else None
+    #     ),
+
+    #     "kyc": (
+    #         {
+    #             **kyc,
+    #             "_id": str(kyc["_id"]),
+    #             "address_proof_file": kyc.get("address_proof_file"),
+    #             "photo_file": kyc.get("photo_file"),
+    #         } if kyc else None
+    #     ),
+
+    #     "bank": (
+    #         {
+    #             **bank,
+    #             "_id": str(bank["_id"]),
+    #             "proof_file": bank.get("proof_file"),
+    #         } if bank else None
+    #     ),
+    # }
+    
+# --- APPROVE ENGINEER COMPLETELY ---
+@router.post("/engineers/{user_id}/approve")
+async def approve_engineer(user_id: str, admin=Depends(get_admin)):
+    uid = ObjectId(user_id)
+
+    await kyc_collection.update_one(
+        {"user_id": uid},
+        {"$set": {"status": "approved"}}
+    )
+
+    await bank_collection.update_one(
+        {"user_id": uid},
+        {"$set": {"status": "approved"}}
+    )
+
+    await profiles_collection.update_one(
+        {"user_id": uid},
+        {"$set": {"status": "verified"}}
+    )
+
+    return {"message": "Engineer fully approved"}
+
+# --- REJECT ENGINEER COMPLETELY ---
+@router.post("/engineers/{user_id}/reject")
+async def reject_engineer(user_id: str, remarks: str | None = None, admin=Depends(get_admin)):
+    uid = ObjectId(user_id)
+
+    await kyc_collection.update_one(
+        {"user_id": uid},
+        {"$set": {"status": "rejected", "remarks": remarks}}
+    )
+
+    await bank_collection.update_one(
+        {"user_id": uid},
+        {"$set": {"status": "rejected", "remarks": remarks}}
+    )
+
+    await profiles_collection.update_one(
+        {"user_id": uid},
+        {"$set": {"status": "rejected"}}
+    )
+
+    return {"message": "Engineer rejected"}
+
+
+
+@router.post("/kyc/{user_id}/status")
+async def update_kyc_status(user_id: str, status: str, remarks: str | None = None, admin=Depends(get_admin)):
+    if status not in {"approved", "rejected"}:
+        raise HTTPException(400, "Invalid status")
+    res = await kyc_collection.update_one(
+        {"user_id": ObjectId(user_id)},
+        {"$set": {"status": status, "remarks": remarks}}
+    )
+    if res.matched_count == 0:
+        raise HTTPException(404, "KYC not found")
+    return {"message": "KYC status updated"}
+
+
+@router.post("/bank/{user_id}/status")
+async def update_bank_status(user_id: str, status: str, remarks: str | None = None, admin=Depends(get_admin)):
+    if status not in {"approved", "rejected"}:
+        raise HTTPException(400, "Invalid status")
+    res = await bank_collection.update_one(
+        {"user_id": ObjectId(user_id)},
+        {"$set": {"status": status, "remarks": remarks}}
+    )
+    if res.matched_count == 0:
+        raise HTTPException(404, "Bank record not found")
+    return {"message": "Bank status updated"}
