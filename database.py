@@ -2,7 +2,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 import os
 
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://mallik:1234@door2fy.hiwgd5h.mongodb.net/door2fy?retryWrites=true&w=majority")
 DB_NAME = os.getenv("DB_NAME", "door2fy")
 
 client = AsyncIOMotorClient(MONGO_URI)

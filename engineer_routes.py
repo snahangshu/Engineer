@@ -2,7 +2,9 @@ from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Form
 import os
 from datetime import datetime
 from bson import ObjectId
-from s3_client import upload_file_to_s3
+#from s3_client import upload_file_to_s3
+from cloudinary_client import upload_file_to_cloudinary
+
 
 
 from database import profiles_collection,kyc_collection,bank_collection
@@ -24,10 +26,17 @@ async def create_or_update_profile(
     user_id = current_user["_id"]
     existing = await profiles_collection.find_one({"user_id": user_id})
     data = payload.dict()
+    # data.update({
+    #     "user_id": user_id,
+    #     "updated_at": datetime.utcnow()
+    # })
+    # Fix : Convert date --> datetime for mongodb
+    if data.get("dob"):
+        data["dob"] = datetime.combine(data["dob"], datetime.min.time())
     data.update({
-        "user_id": user_id,
-        "updated_at": datetime.utcnow()
-    })
+        "user_id": user_id,"updated_at": datetime.utcnow()}
+        )
+    
     if existing:
         await profiles_collection.update_one({"_id": existing["_id"]}, {"$set": data})
     else:
@@ -47,38 +56,38 @@ async def upload_kyc(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = current_user["_id"]
+    user_id_str = str(user_id)  # ✅ IMPORTANT
 
-    def save_file(folder: str, file: UploadFile, user_id: str):
-        ext = os.path.splitext(file.filename)[1]
-        filename = f"{folder}_{user_id}_{int(datetime.utcnow().timestamp())}{ext}"
-        #path = os.path.join(UPLOAD_ROOT, "kyc", filename)
-        # with open(path, "wb") as f:
-        #     f.write(file.file.read())
-        # return path
-        #upload to s3 --> inside "kyc/" folder
-        url = upload_file_to_s3(file.file,filename,folder="kyc")
-        return url
-        
+    # Upload address proof
+    address_url = upload_file_to_cloudinary(
+        address_proof_file.file,
+        folder="door2fy/kyc/address",
+        public_id=f"{user_id_str}_address"
+    )
 
-    address_path = save_file("address", address_proof_file, user_id)
-    photo_path = save_file("photo", photo_file, user_id)
+    # Upload photo
+    photo_url = upload_file_to_cloudinary(
+        photo_file.file,
+        folder="door2fy/kyc/photo",
+        public_id=f"{user_id_str}_photo"
+    )
 
     data = {
         "user_id": user_id,
         "aadhaar_number": aadhaar_number[-4:].rjust(len(aadhaar_number), "X"),
         "pan_number": pan_number,
         "address_proof_type": address_proof_type,
-        "address_proof_file": address_path,
-        "photo_file": photo_path,
+        "address_proof_file": address_url,
+        "photo_file": photo_url,
         "status": "pending",
         "updated_at": datetime.utcnow(),
     }
 
-    existing = await kyc_collection.find_one({"user_id": user_id})
-    if existing:
-        await kyc_collection.update_one({"_id": existing["_id"]}, {"$set": data})
-    else:
-        await kyc_collection.insert_one(data)
+    await kyc_collection.update_one(
+        {"user_id": user_id},
+        {"$set": data},
+        upsert=True
+    )
 
     return {"message": "KYC uploaded, pending verification"}
 
@@ -90,13 +99,14 @@ async def save_bank_details(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = current_user["_id"]
+    user_id_str = str(user_id)  # ✅ convert ObjectId to string
 
-    ext = os.path.splitext(proof_file.filename)[1]
-    filename = f"bank_{user_id}_{int(datetime.utcnow().timestamp())}{ext}"
-    # path = os.path.join(UPLOAD_ROOT, "bank", filename)
-    # with open(path, "wb") as f:
-    #     f.write(proof_file.file.read())
-    proof_url = upload_file_to_s3(proof_file.file,filename,folder="bank")
+    # Upload bank proof to Cloudinary
+    proof_url = upload_file_to_cloudinary(
+        proof_file.file,
+        folder="door2fy/bank",
+        public_id=f"{user_id_str}_bank_proof"
+    )
 
     data = {
         "user_id": user_id,
@@ -108,11 +118,11 @@ async def save_bank_details(
         "updated_at": datetime.utcnow(),
     }
 
-    existing = await bank_collection.find_one({"user_id": user_id})
-    if existing:
-        await bank_collection.update_one({"_id": existing["_id"]}, {"$set": data})
-    else:
-        await bank_collection.insert_one(data)
+    await bank_collection.update_one(
+        {"user_id": user_id},
+        {"$set": data},
+        upsert=True
+    )
 
     return {"message": "Bank details submitted, pending verification"}
 
@@ -129,7 +139,8 @@ async def get_status(current_user: dict = Depends(get_current_user)):
     kyc_status = kyc["status"] if kyc else "pending"
     bank_status = bank["status"] if bank else "pending"
 
-    if profile_status == kyc_status == bank_status == "approved":
+     # FINAL OVERALL STATUS LOGIC
+    if profile_status == "completed" and kyc_status == "approved" and bank_status == "approved":
         overall = "verified"
     elif kyc_status == "rejected" or bank_status == "rejected":
         overall = "rejected"
