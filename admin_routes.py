@@ -41,47 +41,51 @@ async def get_engineer_details(user_id: str, admin=Depends(get_admin)):
 
     if not user:
         raise HTTPException(404, "Engineer not found")
-    #convert IDS
-    user["_id"] = str(user["_id"])
-    if profile:
-        profile["_id"] = str(profile["_id"])
-        profile["user_id"] = str(profile["user_id"])
-    if kyc:
-        kyc["_id"] = str(kyc["_id"])
-        kyc["user_id"] = str(kyc["user_id"])
-    if bank:
-        bank["_id"] = str(bank["_id"])
-        bank["user_id"] = str(bank["user_id"])
-    return {
-        "user": user,
-        "profile": profile,
-        "kyc": kyc,
-        "bank": bank,
-    }
+    # #convert IDS
+    # user["_id"] = str(user["_id"])
+    # if profile:
+    #     profile["_id"] = str(profile["_id"])
+    #     profile["user_id"] = str(profile["user_id"])
+    # if kyc:
+    #     kyc["_id"] = str(kyc["_id"])
+    #     kyc["user_id"] = str(kyc["user_id"])
+    # if bank:
+    #     bank["_id"] = str(bank["_id"])
+    #     bank["user_id"] = str(bank["user_id"])
     # return {
-    #     "user": {**user, "_id": str(user["_id"])},
-
-    #     "profile": (
-    #         {**profile, "_id": str(profile["_id"])} if profile else None
-    #     ),
-
-    #     "kyc": (
-    #         {
-    #             **kyc,
-    #             "_id": str(kyc["_id"]),
-    #             "address_proof_file": kyc.get("address_proof_file"),
-    #             "photo_file": kyc.get("photo_file"),
-    #         } if kyc else None
-    #     ),
-
-    #     "bank": (
-    #         {
-    #             **bank,
-    #             "_id": str(bank["_id"]),
-    #             "proof_file": bank.get("proof_file"),
-    #         } if bank else None
-    #     ),
+    #     "user": user,
+    #     "profile": profile,
+    #     "kyc": kyc,
+    #     "bank": bank,
     # }
+    return {
+        "user": {
+            "id": str(user["_id"]),
+            "email": user.get("email"),
+            "role": user.get("role"),
+        },
+        "profile": {
+            "id": str(profile["_id"]),
+            "name": profile.get("name"),
+            "phone": profile.get("phone"),
+            "status": profile.get("status"),
+        } if profile else None,
+
+        "kyc": {
+            "id": str(kyc["_id"]),
+            "status": kyc.get("status"),
+            "remarks": kyc.get("remarks"),
+            "photo_file": kyc.get("photo_file"),               # ✅ KYC photo URL
+            "address_proof_file": kyc.get("address_proof_file") # ✅ Address proof URL
+        } if kyc else None,
+
+        "bank": {
+            "id": str(bank["_id"]),
+            "status": bank.get("status"),
+            "remarks": bank.get("remarks"),
+            "proof_file": bank.get("proof_file")               # ✅ Bank proof URL
+        } if bank else None
+    }
     
 # --- APPROVE ENGINEER COMPLETELY ---
 @router.post("/engineers/{user_id}/approve")
