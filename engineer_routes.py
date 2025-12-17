@@ -94,7 +94,10 @@ async def upload_kyc(
 
 @router.post("/bank")
 async def save_bank_details(
-    payload: schemas.BankDetailsCreate,
+    # payload: schemas.BankDetailsCreate,
+    bank_name: str = Form(...),
+    account_number: str = Form(...),
+    ifsc_code: str = Form(...),
     proof_file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user),
 ):
@@ -110,9 +113,9 @@ async def save_bank_details(
 
     data = {
         "user_id": user_id,
-        "bank_name": payload.bank_name,
-        "account_number": payload.account_number,
-        "ifsc_code": payload.ifsc_code,
+        "bank_name": bank_name,
+        "account_number": account_number,
+        "ifsc_code": ifsc_code,
         "proof_file": proof_url,
         "status": "pending",
         "updated_at": datetime.utcnow(),
