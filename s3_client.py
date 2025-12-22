@@ -4,8 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-AWS_ACCESS_KEY = os.getenv("AKIAWOURBAX4TPJ5WQMI")
-AWS_SECRET_KEY = os.getenv("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")
+
 AWS_REGION = "ap-south-1"
 AWS_BUCKET = "door2fy-engineer-files"
 
