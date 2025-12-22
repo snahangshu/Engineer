@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
-from datetime import timedelta
+from datetime import datetime,timedelta
+import uuid
 import schemas
 from database import users_collection
 from utils import create_access_token, generate_otp
@@ -28,7 +29,8 @@ async def register(req: schemas.RegisterRequest):
             res = await users_collection.insert_one({
                 "mobile": req.mobile,
                 "email": None,
-                "verified": {"mobile": False, "email": False}
+                "verified": {"mobile": False, "email": False},
+                "created_at": datetime.utcnow()
             })
             user_id = res.inserted_id
         else:
@@ -42,20 +44,21 @@ async def register(req: schemas.RegisterRequest):
             res = await users_collection.insert_one({
                 "mobile": None,
                 "email": req.email,
-                "verified": {"mobile": False, "email": False}
+                "verified": {"mobile": False, "email": False},
+                "created_at": datetime.utcnow()
             })
             user_id = res.inserted_id
         else:
             user_id = user["_id"]
 
     otp = generate_otp()
-    session_id = str(user_id)
+    session_id = str(uuid.uuid4())# unique per otp flow
 
     # For now we just log OTP in server; in real app send via SMS / email
-    OTP_STORE[session_id] = {"otp": otp, "identifier": identifier}
+    OTP_STORE[session_id] = {"otp": otp, "user_id":str(user_id),"expires_at": datetime.utcnow() + timedelta(minutes=5)}
     print("DEBUG OTP for", identifier, "=", otp)
 
-    return {"session_id": session_id, "message": "OTP sent (debug: check logs)"}
+    return {"session_id": session_id,"is_new_user":not bool(user), "message": "OTP sent (debug: check logs)"}
 
 
 @router.post("/verify-otp", response_model=schemas.TokenResponse)
@@ -63,8 +66,11 @@ async def verify_otp(req: schemas.VerifyOtpRequest):
     data = OTP_STORE.get(req.session_id)
     if not data or data["otp"] != req.otp:
         raise HTTPException(400, "Invalid OTP")
+    if datetime.utcnow() > data["expires_at"]:
+        OTP_STORE.pop(req.session_id, None)
+        raise HTTPException(400, "OTP expired")
 
-    user_id = ObjectId(req.session_id)
+    user_id = ObjectId(data["user_id"])
     user = await users_collection.find_one({"_id": user_id})
     if not user:
         raise HTTPException(404, "User not found")
@@ -83,8 +89,9 @@ async def verify_otp(req: schemas.VerifyOtpRequest):
 
     if update:
         await users_collection.update_one({"_id": user_id}, {"$set": update})
+    OTP_STORE.pop(req.session_id, None)  # ✅ cleanup
 
-    token = create_access_token({"sub": str(user_id)})
+    token = create_access_token({"sub": str(user_id),"role": update["role"]})
     return schemas.TokenResponse(access_token=token)
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):

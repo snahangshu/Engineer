@@ -6,7 +6,7 @@ import random
 
 SECRET_KEY = os.getenv("JWT_SECRET", "supersecret")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 6
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -17,6 +17,12 @@ def hash_password(password: str) -> str:
 
 def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
+
+# def hash_otp(otp: str) -> str:
+#     return pwd_context.hash(otp)
+
+# def verify_otp(plain: str, hashed: str) -> bool:
+#     return pwd_context.verify(plain, hashed)
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):

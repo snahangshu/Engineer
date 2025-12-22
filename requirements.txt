@@ -6,3 +6,4 @@ python-jose[cryptography]
 passlib[bcrypt]
 python-multipart
 # boto3 python-multipart
+cloudinary
