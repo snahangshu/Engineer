@@ -5,6 +5,6 @@ pydantic[email]
 python-jose[cryptography]
 passlib[bcrypt]
 python-multipart
-boto3 python-multipart
+boto3
 cloudinary
 twilio
