@@ -10,7 +10,7 @@ app = FastAPI(title="Door2Fy Associate Engineer Backend")
 # CORS for your React/Next/other frontend
 origins = [
     "http://localhost:8080",
-    "https://your-frontend-domain.com",
+    "https://partner.door2fy.in/",
 ]
 app.add_middleware(
     CORSMiddleware,
