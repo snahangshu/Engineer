@@ -1,12 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
+from dotenv import load_dotenv
+load_dotenv()
+import os
 from auth_routes import router as auth_router
 from engineer_routes import router as engineer_router
 from admin_routes import router as admin_router
 
 app = FastAPI(title="Door2Fy Associate Engineer Backend")
-
 # CORS for your React/Next/other frontend
 # origins = [
 #     "http://localhost:8080",

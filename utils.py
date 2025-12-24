@@ -2,10 +2,10 @@ from datetime import datetime, timedelta
 from jose import jwt
 from passlib.context import CryptContext
 import os
-import random
+#import random
 
 SECRET_KEY = os.getenv("JWT_SECRET", "supersecret")
-ALGORITHM = "HS256"
+ALGORITHM = os.getenv("ALGORITHM")
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 6
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -32,5 +32,5 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def generate_otp() -> str:
-    return f"{random.randint(100000, 999999)}"
+# def generate_otp() -> str:
+#     return f"{random.randint(100000, 999999)}"
