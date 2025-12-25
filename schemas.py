@@ -1,4 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field
+from fastapi import Form
+from typing import Optional
 from typing import Optional, List
 from datetime import date
 
@@ -30,7 +32,16 @@ class ProfileCreate(BaseModel):
     preferred_city: str
     current_location: str
     isAvailable: bool = False
-
+class KYCForm:
+    def __init__(
+        self,
+        aadhaar_number: str = Form(..., min_length=12, max_length=12),
+        pan_number: str = Form(..., min_length=10, max_length=10),
+        address_proof_type: str = Form(...),
+    ):
+        self.aadhaar_number = aadhaar_number
+        self.pan_number = pan_number
+        self.address_proof_type = address_proof_type
 
 class BankDetailsCreate(BaseModel):
     bank_name: str

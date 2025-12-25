@@ -4,11 +4,10 @@ from datetime import datetime
 from bson import ObjectId
 #from s3_client import upload_file_to_s3
 from cloudinary_client import upload_file_to_cloudinary
-
-
-
 from database import profiles_collection,kyc_collection,bank_collection
 from auth_routes import get_current_user
+from schemas import KYCForm
+from fastapi import UploadFile, File, Depends
 import schemas
 
 router = APIRouter(prefix="/engineer", tags=["Engineer"])
@@ -48,9 +47,7 @@ async def create_or_update_profile(
 
 @router.post("/kyc")
 async def upload_kyc(
-    aadhaar_number: str = Form(...),
-    pan_number: str = Form(...),
-    address_proof_type: str = Form(...),
+    kyc: KYCForm = Depends(),   # ✅ schema added
     address_proof_file: UploadFile = File(...),
     photo_file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user),
@@ -74,9 +71,9 @@ async def upload_kyc(
 
     data = {
         "user_id": user_id,
-        "aadhaar_number": aadhaar_number[-4:].rjust(len(aadhaar_number), "X"),
-        "pan_number": pan_number,
-        "address_proof_type": address_proof_type,
+        "aadhaar_number": kyc.aadhaar_number[-4:].rjust(len(aadhaar_number), "X"),
+        "pan_number": kyc.pan_number,
+        "address_proof_type": kyc.address_proof_type,
         "address_proof_file": address_url,
         "photo_file": photo_url,
         "status": "pending",

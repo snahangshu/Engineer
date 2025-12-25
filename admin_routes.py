@@ -24,11 +24,18 @@ async def list_engineers(admin=Depends(get_admin)):
     ])
     result = []
     async for doc in cursor:
-        doc["id"] = str(doc["_id"])
-        doc["user_id"] = str(doc["user_id"])
-        doc.pop("_id", None)
-        result.append(doc)
+        result.append({
+            "id": str(doc["_id"]),
+            "user_id": str(doc["user_id"]),
+            "name": doc.get("full_name"),
+            "mobile": doc.get("contact_number"),
+            "email": doc["user"].get("email"),
+            "status": doc.get("status"),
+        })
+    print(type(result))
     return result
+
+
 
 # --- FULL ENGINEER DETAILS ---
 @router.get("/engineers/{user_id}")
@@ -62,19 +69,28 @@ async def get_engineer_details(user_id: str, admin=Depends(get_admin)):
     return {
         "user": {
             "id": str(user["_id"]),
-            "email": user.get("email"),
+            "email": profile.get("email"),
             "role": user.get("role"),
         },
         "profile": {
-            "id": str(profile["_id"]),
-            "name": profile.get("name"),
-            "phone": profile.get("phone"),
-            "status": profile.get("status"),
-        } if profile else None,
-
+                "id": str(profile["_id"]),
+                "name": profile.get("full_name"),
+                "phone": profile.get("contact_number"),
+                "email": profile.get("email"),
+                "skills": profile.get("skill_category", []),
+                "specializations": profile.get("specializations", []),
+                "preferred_city": profile.get("preferred_city"),
+                "current_location": profile.get("current_location"),
+                "isAvailable": profile.get("isAvailable", False),
+                "status": profile.get("status", "pending"),
+            } if profile else None,
         "kyc": {
             "id": str(kyc["_id"]),
             "status": kyc.get("status"),
+            # 🔐 Sensitive but masked (safe for admin)
+            "aadhaar_number": kyc.get("aadhaar_number"),
+            "pan_number": kyc.get("pan_number"),
+            "address_proof_type": kyc.get("address_proof_type"),
             "remarks": kyc.get("remarks"),
             "photo_file": kyc.get("photo_file"),               # ✅ KYC photo URL
             "address_proof_file": kyc.get("address_proof_file") # ✅ Address proof URL
@@ -82,6 +98,9 @@ async def get_engineer_details(user_id: str, admin=Depends(get_admin)):
 
         "bank": {
             "id": str(bank["_id"]),
+            "bank_name": bank.get("bank_name"),
+            "account_number": bank.get("account_number"),
+            "ifsc_code": bank.get("ifsc_code"),
             "status": bank.get("status"),
             "remarks": bank.get("remarks"),
             "proof_file": bank.get("proof_file")               # ✅ Bank proof URL
@@ -115,7 +134,7 @@ async def approve_engineer(user_id: str, admin=Depends(get_admin)):
         raise HTTPException(404, "Engineer data incomplete")
     skills = []
     if profile.get("skill_category"):
-        skills = [profile.get("skill_category")]
+        skills = profile.get("skill_category")
 
     # 3️⃣ Prepare payload for external backend
     payload = {
