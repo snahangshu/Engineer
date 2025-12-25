@@ -5,13 +5,13 @@ import schemas
 from database import users_collection
 from utils import create_access_token
 from bson import ObjectId
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from utils import SECRET_KEY, ALGORITHM
 from services.twilio_otp import send_otp, verify_otp as twilio_verify_otp
 
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")#not actually used
+security = HTTPBearer()
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -21,6 +21,25 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 #========================Register/Send Otp===============
 @router.post("/register")
 async def register(req: schemas.RegisterRequest):
+    # ================= ADMIN REGISTER BYPASS =================
+    if req.mode == "mobile" and req.mobile == "9612686019":
+        user = await users_collection.find_one({"mobile": "9612686019"})
+
+        if not user:
+            res = await users_collection.insert_one({
+                "mobile": "9612686019",
+                "email": None,
+                "verified": {"mobile": True, "email": False},
+                "role": "admin",
+                "created_at": datetime.utcnow()
+            })
+            user_id = res.inserted_id
+
+        return {
+            "identifier": f"+91{9612686019}",
+            "is_new_user": False,
+            "message": "Admin OTP required"
+        }
     if req.mode == "mobile":
         if not req.mobile:
             raise HTTPException(400, "Mobile is required")
@@ -80,7 +99,33 @@ async def verify_otp(req: schemas.VerifyOtpRequest):
     # if datetime.utcnow() > data["expires_at"]:
     #     OTP_STORE.pop(req.session_id, None)
     #     raise HTTPException(400, "OTP expired")
-    
+    # ================= ADMIN OTP BYPASS =================
+    if req.identifier.endswith("9612686019"):
+        if req.otp != "123456":
+            raise HTTPException(400, "Invalid admin OTP")
+
+        user = await users_collection.find_one({"mobile": "9612686019"})
+        if not user:
+            raise HTTPException(404, "Admin user not found")
+
+        await users_collection.update_one(
+            {"_id": user["_id"]},
+            {"$set": {
+                "verified.mobile": True,
+                "role": "admin"
+            }}
+        )
+
+        token = create_access_token({
+            "sub": str(user["_id"]),
+            "role": "admin"
+        })
+
+        return schemas.TokenResponse(access_token=token)
+
+    # ================= ENGINEER (TWILIO OTP) =================
+
+    # ================= NORMAL USER (TWILIO) =================
     is_valid = twilio_verify_otp(req.identifier, req.otp)
     if not  is_valid:
         raise HTTPException(400, "Invalid OTP")
@@ -100,7 +145,7 @@ async def verify_otp(req: schemas.VerifyOtpRequest):
     if user.get("email"):
         update["verified.email"] = True
         # Assign roles
-    update["role"] = "admin" if user.get("email") == "admin@door2fy.in" else "engineer"
+    update["role"] = "admin" if user.get("email") == "snahangshu@door2fy.in" else "engineer"
     await users_collection.update_one({"_id": user["_id"]}, {"$set": update})
     # if update:
     #     await users_collection.update_one({"_id": user_id}, {"$set": update})
@@ -109,16 +154,24 @@ async def verify_otp(req: schemas.VerifyOtpRequest):
     token = create_access_token({"sub": str(user["_id"]),"role": update["role"]})
     return schemas.TokenResponse(access_token=token)
 #========================Get Current User================
-async def get_current_user(token: str = Depends(oauth2_scheme)):
-    cred_exc = HTTPException(status_code=401, detail="Could not validate credentials")
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+
+    cred_exc = HTTPException(
+        status_code=401,
+        detail="Could not validate credentials"
+    )
+
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: str = payload.get("sub")
-        if user_id is None:
+        if not user_id:
             raise cred_exc
     except JWTError:
         raise cred_exc
+
     user = await users_collection.find_one({"_id": ObjectId(user_id)})
     if not user:
         raise cred_exc
+
     return user

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from bson import ObjectId
 from database import kyc_collection, bank_collection, profiles_collection, users_collection
 from auth_routes import get_current_user
+from services.external_engineer_sync import sync_engineer_to_external
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -106,8 +107,50 @@ async def approve_engineer(user_id: str, admin=Depends(get_admin)):
         {"user_id": uid},
         {"$set": {"status": "verified"}}
     )
+    # 2️⃣ Fetch data for external sync
+    user = await users_collection.find_one({"_id": uid})
+    profile = await profiles_collection.find_one({"user_id": uid})
 
-    return {"message": "Engineer fully approved"}
+    if not user or not profile:
+        raise HTTPException(404, "Engineer data incomplete")
+    skills = []
+    if profile.get("skill_category"):
+        skills = [profile.get("skill_category")]
+
+    # 3️⃣ Prepare payload for external backend
+    payload = {
+        "engineer_id": str(user["_id"]),
+        "name": profile.get("full_name"),
+        "mobile": profile.get("contact_number"),
+        "email": profile.get("email"),
+        #"skills": profile.get("skill_category", []),
+        "skills": skills,
+        "categories": profile.get("specializations")or [],
+        "address": profile.get("preferred_city"),
+        "currentLocation": profile.get("current_location"),
+        "isActive": True,
+        "isAvailable": profile.get("isAvailable", False),
+    }
+    # 4. Validate required fields (important)
+    required_fields = ["name", "mobile"]
+    for field in required_fields:
+        if not payload.get(field):
+            raise HTTPException(400, f"Missing field for external sync: {field}")
+
+    # 4️⃣ Push to external backend
+    try:
+        external_response = await sync_engineer_to_external(payload)
+    except Exception as e:
+        # IMPORTANT: Do not rollback approvals
+        return {
+            "message": "Engineer approved, but external sync failed",
+            "error": str(e)
+        }
+
+    return {
+        "message": "Engineer approved and synced successfully",
+        "external_response": external_response
+    }
 
 # --- REJECT ENGINEER COMPLETELY ---
 @router.post("/engineers/{user_id}/reject")

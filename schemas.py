@@ -29,7 +29,7 @@ class ProfileCreate(BaseModel):
     specializations: List[str] = []
     preferred_city: str
     current_location: str
-    willing_to_relocate: bool = False
+    isAvailable: bool = False
 
 
 class BankDetailsCreate(BaseModel):
