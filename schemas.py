@@ -25,7 +25,7 @@ class ProfileCreate(BaseModel):
     gender: str
     contact_number: str
     email: EmailStr
-    skill_category: str
+    skill_category:List[str] = []
     specializations: List[str] = []
     preferred_city: str
     current_location: str
