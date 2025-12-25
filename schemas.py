@@ -10,7 +10,7 @@ class RegisterRequest(BaseModel):
 
 
 class VerifyOtpRequest(BaseModel):
-    session_id: str
+    identifier: str
     otp: str
 
 

@@ -21,8 +21,8 @@ def verify_password(plain: str, hashed: str) -> bool:
 # def hash_otp(otp: str) -> str:
 #     return pwd_context.hash(otp)
 
-# def verify_otp(plain: str, hashed: str) -> bool:
-#     return pwd_context.verify(plain, hashed)
+#def verify_otp(plain: str, hashed: str) -> bool:
+    return pwd_context.verify(plain, hashed)
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):

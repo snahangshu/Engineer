@@ -8,7 +8,7 @@ from bson import ObjectId
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from utils import SECRET_KEY, ALGORITHM
-from services.twilio_otp import send_otp, verify_otp
+from services.twilio_otp import send_otp, verify_otp as twilio_verify_otp
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")#not actually used
@@ -81,8 +81,8 @@ async def verify_otp(req: schemas.VerifyOtpRequest):
     #     OTP_STORE.pop(req.session_id, None)
     #     raise HTTPException(400, "OTP expired")
     
-    is_valid = verify_otp(req.identifier, req.otp)
-    if not is_valid:
+    is_valid = twilio_verify_otp(req.identifier, req.otp)
+    if not  is_valid:
         raise HTTPException(400, "Invalid OTP")
     #find user
     #user_id = ObjectId(data["user_id"])
