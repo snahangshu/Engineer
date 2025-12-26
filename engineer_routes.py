@@ -71,7 +71,7 @@ async def upload_kyc(
 
     data = {
         "user_id": user_id,
-        "aadhaar_number": kyc.aadhaar_number[-4:].rjust(len(aadhaar_number), "X"),
+        "aadhaar_number": kyc.aadhaar_number[-4:].rjust(len(kyc.aadhaar_number), "X"),
         "pan_number": kyc.pan_number,
         "address_proof_type": kyc.address_proof_type,
         "address_proof_file": address_url,

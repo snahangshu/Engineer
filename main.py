@@ -15,7 +15,7 @@ app = FastAPI(title="Door2Fy Associate Engineer Backend")
 # ]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://partner.door2fy.in"],
+    allow_origins=["https://partner.door2fy.in", "https://eng.door2fy.in/login"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
