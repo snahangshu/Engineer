@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field , constr
 from fastapi import Form
 from typing import Optional
 from typing import Optional, List
@@ -31,6 +31,7 @@ class ProfileCreate(BaseModel):
     specializations: List[str] = []
     preferred_city: str
     current_location: str
+    pincode: str
     isAvailable: bool = False
 class KYCForm:
     def __init__(
@@ -54,3 +55,4 @@ class StatusResponse(BaseModel):
     kyc_status: str
     bank_status: str
     overall_status: str
+    is_hold: bool

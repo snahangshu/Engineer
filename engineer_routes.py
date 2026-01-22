@@ -39,10 +39,20 @@ async def create_or_update_profile(
     if existing:
         await profiles_collection.update_one({"_id": existing["_id"]}, {"$set": data})
     else:
-        data["created_at"] = datetime.utcnow()
-        await profiles_collection.insert_one(data)
+        # 🆕 FIRST-TIME PROFILE CREATION
+        data.update({
+            "user_id": user_id,
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow(),
+            "status": "pending",
+            "is_hold": True      # ✅ HOLD ENGINEER AFTER PROFILE
+        })
 
-    return {"message": "Profile saved"}
+        await profiles_collection.insert_one(data)
+    # ✅ ALWAYS FETCH FRESH STATE
+    profile = await profiles_collection.find_one({"user_id": user_id})
+    return {"message": "Profile saved Successfully",
+        "is_hold": profile.get("is_hold", True),"status": profile.get("status")}
 
 
 @router.post("/kyc")
@@ -53,6 +63,21 @@ async def upload_kyc(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = current_user["_id"]
+     # ================== HOLD CHECK (ADD HERE) ==================
+    profile = await profiles_collection.find_one({"user_id": user_id})
+
+    if not profile:
+        raise HTTPException(
+            status_code=400,
+            detail="Profile not completed"
+        )
+
+    if profile.get("is_hold", True):
+        raise HTTPException(
+            status_code=403,
+            detail="Your profile is under review. Please wait for admin approval."
+        )
+    # ===================================================
     user_id_str = str(user_id)  # ✅ IMPORTANT
 
     # Upload address proof
@@ -99,6 +124,21 @@ async def save_bank_details(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = current_user["_id"]
+    # ================== HOLD CHECK (ADD HERE) ==================
+    profile = await profiles_collection.find_one({"user_id": user_id})
+
+    if not profile:
+        raise HTTPException(
+            status_code=400,
+            detail="Profile not completed"
+        )
+
+    if profile.get("is_hold", True):
+        raise HTTPException(
+            status_code=403,
+            detail="Your profile is under review. Bank details cannot be submitted yet."
+        )
+    # ============================================================
     user_id_str = str(user_id)  # ✅ convert ObjectId to string
 
     # Upload bank proof to Cloudinary
@@ -135,12 +175,17 @@ async def get_status(current_user: dict = Depends(get_current_user)):
     kyc = await kyc_collection.find_one({"user_id": user_id})
     bank = await bank_collection.find_one({"user_id": user_id})
 
-    profile_status = "completed" if profile else "pending"
+    if not profile:
+        profile_status = "pending"
+        is_hold = True
+    else:
+        is_hold = profile.get("is_hold", True)
+        profile_status = "pending" if is_hold else "active"
     kyc_status = kyc["status"] if kyc else "pending"
     bank_status = bank["status"] if bank else "pending"
-
+    # is_hold = profile.get("is_hold", True) if profile else True
      # FINAL OVERALL STATUS LOGIC
-    if profile_status == "completed" and kyc_status == "approved" and bank_status == "approved":
+    if not is_hold and kyc_status == "approved" and bank_status == "approved":
         overall = "verified"
     elif kyc_status == "rejected" or bank_status == "rejected":
         overall = "rejected"
@@ -152,4 +197,5 @@ async def get_status(current_user: dict = Depends(get_current_user)):
         kyc_status=kyc_status,
         bank_status=bank_status,
         overall_status=overall,
+        is_hold=is_hold
     )

@@ -1,8 +1,12 @@
+from datetime import datetime
+import profile
 from fastapi import APIRouter, Depends, HTTPException
 from bson import ObjectId
 from database import kyc_collection, bank_collection, profiles_collection, users_collection
 from auth_routes import get_current_user
 from services.external_engineer_sync import sync_engineer_to_external
+from services.interakt_whatsapp import send_whatsapp_message
+
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -31,6 +35,7 @@ async def list_engineers(admin=Depends(get_admin)):
             "mobile": doc.get("contact_number"),
             "email": doc["user"].get("email"),
             "status": doc.get("status"),
+            "is_hold": doc.get("is_hold", True)
         })
     print(type(result))
     return result
@@ -81,8 +86,10 @@ async def get_engineer_details(user_id: str, admin=Depends(get_admin)):
                 "specializations": profile.get("specializations", []),
                 "preferred_city": profile.get("preferred_city"),
                 "current_location": profile.get("current_location"),
+                "pincode": profile.get("pincode"),
                 "isAvailable": profile.get("isAvailable", False),
                 "status": profile.get("status", "pending"),
+                "is_hold": profile.get("is_hold", False),
             } if profile else None,
         "kyc": {
             "id": str(kyc["_id"]),
@@ -106,7 +113,27 @@ async def get_engineer_details(user_id: str, admin=Depends(get_admin)):
             "proof_file": bank.get("proof_file")               # ✅ Bank proof URL
         } if bank else None
     }
-    
+@router.post("/engineers/{user_id}/unhold")
+async def unhold_engineer(user_id: str, admin=Depends(get_admin)):
+    uid = ObjectId(user_id)
+
+    result = await profiles_collection.update_one(
+        {"user_id": uid},
+        {
+            "$set": {
+                "is_hold": False,
+                "status": "active",
+                "updated_at": datetime.utcnow()
+            }
+        }
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(404, "Engineer profile not found")
+
+    return {"message": "Engineer unhold. KYC & Bank steps enabled."}
+   
+
 # --- APPROVE ENGINEER COMPLETELY ---
 @router.post("/engineers/{user_id}/approve")
 async def approve_engineer(user_id: str, admin=Depends(get_admin)):
@@ -126,6 +153,11 @@ async def approve_engineer(user_id: str, admin=Depends(get_admin)):
         {"user_id": uid},
         {"$set": {"status": "verified"}}
     )
+    # await send_whatsapp_message(
+    #     phone=profile["contact_number"],
+    #     template_name="engineer_approved",
+    #     params=[profile["full_name"]]
+    # )
     # 2️⃣ Fetch data for external sync
     user = await users_collection.find_one({"_id": uid})
     profile = await profiles_collection.find_one({"user_id": uid})
@@ -147,6 +179,7 @@ async def approve_engineer(user_id: str, admin=Depends(get_admin)):
         "categories": profile.get("specializations")or [],
         "address": profile.get("preferred_city"),
         "currentLocation": profile.get("current_location"),
+        "pincode": profile.get("pincode"),
         "isActive": True,
         "isAvailable": profile.get("isAvailable", False),
     }
@@ -175,7 +208,10 @@ async def approve_engineer(user_id: str, admin=Depends(get_admin)):
 @router.post("/engineers/{user_id}/reject")
 async def reject_engineer(user_id: str, remarks: str | None = None, admin=Depends(get_admin)):
     uid = ObjectId(user_id)
-
+    user = await users_collection.find_one({"_id": uid})
+    profile = await profiles_collection.find_one({"user_id": uid})
+    if not user or not profile:
+        raise HTTPException(404, "Engineer not found")
     await kyc_collection.update_one(
         {"user_id": uid},
         {"$set": {"status": "rejected", "remarks": remarks}}
@@ -190,7 +226,15 @@ async def reject_engineer(user_id: str, remarks: str | None = None, admin=Depend
         {"user_id": uid},
         {"$set": {"status": "rejected"}}
     )
-
+    # # 📲 Send WhatsApp
+    # await send_whatsapp_message(
+    #     phone=profile["contact_number"],
+    #     template_name="engineer_rejected",
+    #     params=[
+    #         profile["full_name"],
+    #         remarks or "Documents not valid"
+    #     ]
+    # )
     return {"message": "Engineer rejected"}
 
 
