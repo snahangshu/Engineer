@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+motor
+pydantic[email]
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+boto3
+cloudinary
+twilio
+httpx
